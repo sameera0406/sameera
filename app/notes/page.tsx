@@ -7,7 +7,10 @@ import Link from 'next/link'
 export default async function NotesPage() {
   const cookieStore = await cookies()
   const supabase = await createClient()
-
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) {
+    return redirect('/login') // Make sure to import { redirect } from 'next/navigation'
+  }
   // 1. Action to Add a Note
   async function addNote(formData: FormData) {
     'use server'
