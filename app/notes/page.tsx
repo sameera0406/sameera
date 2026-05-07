@@ -1,9 +1,11 @@
 export const dynamic = 'force-dynamic' 
+import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { revalidatePath } from 'next/cache'
 import Link from 'next/link'
 
 export default async function NotesPage() {
+  const cookieStore = await cookies()
   const supabase = await createClient()
 
   // 1. Action to Add a Note
