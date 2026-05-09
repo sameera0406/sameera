@@ -8,18 +8,19 @@ async function addNote(formData: FormData) {
   'use server'
   const title = formData.get('title') as string
   const supabase = await createClient()
-  
-  // Get the current user session
+
+  // 1. Get the current user data
   const { data: { user } } = await supabase.auth.getUser()
 
   if (user) {
-    // Manually inserting the user_id ensures the RLS policy identifies the owner
+    // 2. Insert BOTH the user_id and the email
     await supabase.from('notes').insert({ 
-      title, 
-      user_id: user.id 
+      title: title, 
+      user_id: user.id,
+      user_email: user.email // This sends the mail to your new column
     })
   }
-  
+
   revalidatePath('/notes')
 }
 
