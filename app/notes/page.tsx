@@ -6,11 +6,20 @@ import { createClient } from '@/lib/supabase/server'
 // --- Server Actions ---
 async function addNote(formData: FormData) {
   'use server'
-  const title = formData.get('title')?.toString().trim()
-  if (!title) return
-
+  const title = formData.get('title') as string
   const supabase = await createClient()
-  await supabase.from('notes').insert({ title })
+  
+  // Get the current user session
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (user) {
+    // Manually inserting the user_id ensures the RLS policy identifies the owner
+    await supabase.from('notes').insert({ 
+      title, 
+      user_id: user.id 
+    })
+  }
+  
   revalidatePath('/notes')
 }
 
