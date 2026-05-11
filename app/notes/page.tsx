@@ -9,15 +9,14 @@ async function addNote(formData: FormData) {
   const title = formData.get('title') as string
   const supabase = await createClient()
 
-  // 1. Get the current user data
   const { data: { user } } = await supabase.auth.getUser()
 
   if (user) {
-    // 2. Insert BOTH the user_id and the email
+    // We still insert directly to Supabase as the DB manager
     await supabase.from('notes').insert({ 
       title: title, 
       user_id: user.id,
-      user_email: user.email // This sends the mail to your new column
+      user_email: user.email 
     })
   }
 
@@ -38,25 +37,38 @@ async function deleteNote(formData: FormData) {
 async function NotesList() {
   const supabase = await createClient()
   
-  // Auth Check
+  // 1. Auth Check to get the current user's ID
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) {
     redirect('/login')
   }
 
-  const { data: notes } = await supabase
-    .from('notes')
-    .select('id,title')
-    .order('id', { ascending: false })
+  // 2. FETCH FROM YOUR FASTAPI BACKEND INSTEAD OF SUPABASE
+  // This triggers your Python code: SELECT ... WHERE user_id = :uid
+  const response = await fetch("https://fastapi-notes-app-sjsp.onrender.com/notes", {
+    method: "GET",
+    headers: {
+      "user_id": user.id, // Security header passed to FastAPI
+      "Content-Type": "application/json"
+    },
+    // Ensure Next.js doesn't cache the request so it stays private per user
+    cache: 'no-store' 
+  });
+
+  const notes = await response.json();
 
   return (
     <div className="grid gap-4">
-      {notes?.map((note) => (
+      {notes?.map((note: any) => (
         <div
           key={note.id}
           className="group flex justify-between items-center bg-white/5 border border-white/10 p-6 rounded-2xl mb-4 hover:bg-white/[0.07] transition-all"
         >
-          <p className="text-lg text-gray-200">{note.title}</p>
+          <div className="flex flex-col">
+            <p className="text-lg text-gray-200">{note.title}</p>
+            {/* Optional: show content if your API returns it */}
+            {note.content && <p className="text-sm text-gray-500 mt-1">{note.content}</p>}
+          </div>
           <form action={deleteNote}>
             <input type="hidden" name="id" value={note.id} />
             <button
@@ -93,8 +105,7 @@ export default function NotesPage() {
           </button>
         </form>
 
-        {/* This Suspense boundary solves your build error */}
-        <Suspense fallback={<div className="text-gray-500 italic">Loading notes...</div>}>
+        <Suspense fallback={<div className="text-gray-500 italic">Loading your private notes...</div>}>
           <NotesList />
         </Suspense>
       </div>
