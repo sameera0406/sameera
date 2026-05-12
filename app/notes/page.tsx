@@ -12,7 +12,6 @@ async function addNote(formData: FormData) {
   const { data: { user } } = await supabase.auth.getUser()
 
   if (user) {
-    // We still insert directly to Supabase as the DB manager
     await supabase.from('notes').insert({ 
       title: title, 
       user_id: user.id,
@@ -37,53 +36,63 @@ async function deleteNote(formData: FormData) {
 async function NotesList() {
   const supabase = await createClient()
   
-  // 1. Auth Check to get the current user's ID
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) {
+  // 1. Get the session explicitly
+  const { data: { user }, error: authError } = await supabase.auth.getUser()
+  
+  if (authError || !user) {
+    console.log("Auth Error or No User:", authError)
     redirect('/login')
   }
 
-  // 2. FETCH FROM YOUR FASTAPI BACKEND INSTEAD OF SUPABASE
-  // This triggers your Python code: SELECT ... WHERE user_id = :uid
-  const response = await fetch("https://fastapi-notes-app-sjsp.onrender.com/notes", {
-    method: "GET",
-    headers: {
-      "user_id": user.id, // Security header passed to FastAPI
-      "Content-Type": "application/json"
-    },
-    // Ensure Next.js doesn't cache the request so it stays private per user
-    cache: 'no-store' 
-  });
+  // Debugging: This will show up in your VS Code terminal (not the browser)
+  console.log("Fetching notes for User ID:", user.id)
 
-  const notes = await response.json();
+  try {
+    const response = await fetch("https://fastapi-notes-app-sjsp.onrender.com/notes", {
+      method: "GET",
+      headers: {
+        // We use user.id here. Ensure your FastAPI code is looking for "user_id"
+        "user_id": user.id, 
+        "Content-Type": "application/json"
+      },
+      cache: 'no-store' 
+    });
 
-  return (
-    <div className="grid gap-4">
-      {notes?.map((note: any) => (
-        <div
-          key={note.id}
-          className="group flex justify-between items-center bg-white/5 border border-white/10 p-6 rounded-2xl mb-4 hover:bg-white/[0.07] transition-all"
-        >
-          <div className="flex flex-col">
-            <p className="text-lg text-gray-200">{note.title}</p>
-            {/* Optional: show content if your API returns it */}
-            {note.content && <p className="text-sm text-gray-500 mt-1">{note.content}</p>}
-          </div>
-          <form action={deleteNote}>
-            <input type="hidden" name="id" value={note.id} />
-            <button
-              type="submit"
-              className="opacity-0 group-hover:opacity-100 transition-opacity bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white text-[10px] font-bold px-3 py-1 rounded-lg tracking-widest uppercase"
-            >
-              Delete
-            </button>
-          </form>
+    const data = await response.json();
+
+    if (!Array.isArray(data)) {
+      return (
+        <div className="bg-red-500/10 border border-red-500/50 p-4 rounded-xl text-red-500">
+          <p className="font-bold">Backend Configuration Error</p>
+          <p className="text-sm">The security guard returned: {data.detail || JSON.stringify(data)}</p>
+          <p className="text-xs mt-2 opacity-50 text-white">Debugging ID sent: {user.id}</p>
         </div>
-      ))}
-    </div>
-  )
-}
+      );
+    }
 
+    if (data.length === 0) {
+      return <div className="text-gray-500 italic text-center py-10">No notes found for your account.</div>
+    }
+
+    return (
+      <div className="grid gap-4">
+        {data.map((note: any) => (
+          <div key={note.id} className="group flex justify-between items-center bg-white/5 border border-white/10 p-6 rounded-2xl mb-4 hover:bg-white/[0.07] transition-all">
+            <p className="text-lg text-gray-200">{note.title}</p>
+            <form action={deleteNote}>
+              <input type="hidden" name="id" value={note.id} />
+              <button type="submit" className="opacity-0 group-hover:opacity-100 transition-opacity bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white text-[10px] font-bold px-3 py-1 rounded-lg tracking-widest uppercase">
+                Delete
+              </button>
+            </form>
+          </div>
+        ))}
+      </div>
+    )
+  } catch (error) {
+    return <div className="text-red-400">Connection failed. Is the Render server awake?</div>
+  }
+}
 // --- Main Page ---
 export default function NotesPage() {
   return (
@@ -105,7 +114,7 @@ export default function NotesPage() {
           </button>
         </form>
 
-        <Suspense fallback={<div className="text-gray-500 italic">Loading your private notes...</div>}>
+        <Suspense fallback={<div className="text-gray-500 italic">Verifying security and loading notes...</div>}>
           <NotesList />
         </Suspense>
       </div>
